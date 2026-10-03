@@ -16,6 +16,17 @@
 
 #define RPMI_DPWR_NAME_MAX_LEN  16
 
+static rpmi_bool_t rpmi_dpwr_state_valid(rpmi_uint32_t state)
+{
+	rpmi_uint32_t value = state & RPMI_DPWR_STATE_VALUE_MASK;
+
+	if (state & ~(RPMI_DPWR_STATE_VALUE_MASK | RPMI_DPWR_STATE_CONTEXT_LOST))
+		return false;
+
+	return value == RPMI_DPWR_STATE_ON || value == RPMI_DPWR_STATE_OFF ||
+	       value >= RPMI_DPWR_STATE_VENDOR_START;
+}
+
 /* A device power domain instance */
 struct rpmi_dpwr {
 	/* Lock to invoke the platform operations to
@@ -90,7 +101,7 @@ static enum rpmi_error __rpmi_dpwr_get_state(struct rpmi_dpwr_group *dpwrgrp,
 	if (ret)
 		goto done;
 
-	if (state != RPMI_DPWR_STATE_ON && state != RPMI_DPWR_STATE_OFF) {
+	if (!rpmi_dpwr_state_valid(state)) {
 		ret = RPMI_ERR_INVALID_STATE;
 		goto done;
 	}
@@ -114,12 +125,18 @@ static enum rpmi_error __rpmi_dpwr_set_state(struct rpmi_dpwr_group *dpwrgrp,
 
 	if (!dpwr)
 		return RPMI_ERR_INVALID_PARAM;
+	if (!rpmi_dpwr_state_valid(dpwr_state))
+		return RPMI_ERR_INVALID_PARAM;
 
 	rpmi_env_lock(dpwr->lock);
 
 	ret = dpwrgrp->ops->get_state(dpwrgrp->ops_priv, dpwr->id, &state);
 	if (ret)
 		goto done;
+	if (!rpmi_dpwr_state_valid(state)) {
+		ret = RPMI_ERR_INVALID_STATE;
+		goto done;
+	}
 
 	if (state == dpwr_state) {
 		ret = RPMI_SUCCESS;
@@ -352,7 +369,7 @@ rpmi_service_group_dpwr_create(rpmi_uint32_t dpwr_count,
 	struct rpmi_service_group *group;
 
 	/* All critical parameters should be non-NULL */
-	if (!dpwr_count || !dpwr_tree_data || !ops) {
+	if (!dpwr_count || !dpwr_tree_data || !ops || !ops->get_state || !ops->set_state) {
 		DPRINTF("%s: invalid parameters\n", __func__);
 		return NULL;
 	}

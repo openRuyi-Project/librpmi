@@ -59,7 +59,7 @@ static struct rpmi_clock_data test_clock_data[TEST_CLK_COUNT] = {
 	[TEST_CLK_BUS] = {
 		.parent_id = -1U,
 		.transition_latency_ms = TEST_CLK_BUS_LATENCY,
-		.rate_count = ARRAY_SIZE(test_bus_rates),
+		.rate_count = ARRAY_SIZE(test_bus_rates) / 3,
 		.clock_type = RPMI_CLK_TYPE_LINEAR,
 		.name = "clk_bus",
 		.clock_rate_array = test_bus_rates,
@@ -135,7 +135,7 @@ static rpmi_uint32_t get_bus_rates_expdata[] = {
 	RPMI_SUCCESS,
 	0,
 	0,
-	3,
+	1,
 	RATE_LO(TEST_CLK_BUS_MIN_RATE),
 	RATE_HI(TEST_CLK_BUS_MIN_RATE),
 	RATE_LO(TEST_CLK_BUS_MAX_RATE),

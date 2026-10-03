@@ -491,18 +491,26 @@ rpmi_clock_sg_get_supp_rates(struct rpmi_service_group *group,
 				    ((const rpmi_uint32_t *)request_data)[1]);
 
 	if (clk_attrs.type == RPMI_CLK_TYPE_LINEAR) {
-		/* max, min and step */
-		for (i = 0; i < 3; i++) {
-			resp[4 + 2*i] = rpmi_to_xe32(trans->is_be,
-				(rpmi_uint32_t)RATE_U64TOLO(rate_array[i]));
-			resp[5 + 2*i] = rpmi_to_xe32(trans->is_be,
-				(rpmi_uint32_t)RATE_U64TOHI(rate_array[i]));
+		if (clk_rate_idx >= rate_count) {
+			resp[0] = rpmi_to_xe32(trans->is_be, (rpmi_uint32_t)RPMI_ERR_INVALID_PARAM);
+			resp_dlen = sizeof(*resp);
+			goto done;
 		}
-		remaining = 0;
-		returned = 3;
+		/* Counts and indices refer to complete min/max/step ranges. */
+		max_rates = (RPMI_MSG_DATA_SIZE(trans->slot_size) - 4 * sizeof(*resp)) /
+			    (3 * sizeof(struct rpmi_clock_rate));
+		returned = rate_count - clk_rate_idx;
+		if (returned > max_rates)
+			returned = max_rates;
+		for (i = 0; i < returned * 3; i++) {
+			rpmi_uint64_t value = rate_array[clk_rate_idx * 3 + i];
+			resp[4 + 2*i] = rpmi_to_xe32(trans->is_be, RATE_U64TOLO(value));
+			resp[5 + 2*i] = rpmi_to_xe32(trans->is_be, RATE_U64TOHI(value));
+		}
+		remaining = rate_count - clk_rate_idx - returned;
 	}
 	else if (clk_attrs.type == RPMI_CLK_TYPE_DISCRETE) {
-		if (clk_rate_idx > rate_count) {
+		if (clk_rate_idx >= rate_count) {
 			resp[0] = rpmi_to_xe32(trans->is_be,
 					       (rpmi_uint32_t)RPMI_ERR_INVALID_PARAM);
 			resp_dlen = sizeof(*resp);
@@ -540,7 +548,8 @@ rpmi_clock_sg_get_supp_rates(struct rpmi_service_group *group,
 	resp[0] = rpmi_to_xe32(trans->is_be, (rpmi_uint32_t)RPMI_SUCCESS);
 
 	resp_dlen = (4 * sizeof(*resp)) +
-				(returned * sizeof(struct rpmi_clock_rate));
+				(returned * (clk_attrs.type == RPMI_CLK_TYPE_LINEAR ? 3 : 1) *
+				 sizeof(struct rpmi_clock_rate));
 
 done:
 	*response_datalen = resp_dlen;

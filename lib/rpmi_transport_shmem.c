@@ -31,9 +31,13 @@ static rpmi_bool_t shmem_is_empty(struct rpmi_transport *trans,
 {
 	struct rpmi_transport_shmem *shtrans = trans->priv;
 	struct rpmi_shmem *shmem = shtrans->shmem;
-	rpmi_uint32_t queue_base = shtrans->queues[qtype].queue_base;
+	rpmi_uint32_t queue_base;
 	rpmi_uint32_t headidx, tailidx;
 	int rc;
+
+	if (qtype >= shtrans->queue_count)
+		return false;
+	queue_base = shtrans->queues[qtype].queue_base;
 
 	rc = rpmi_shmem_read(shmem, queue_base, &headidx, sizeof(headidx));
 	if (rc) {
@@ -51,6 +55,9 @@ static rpmi_bool_t shmem_is_empty(struct rpmi_transport *trans,
 		return false;
 	}
 	tailidx = rpmi_to_le32(tailidx);
+	if (headidx >= shtrans->queues[qtype].data_slots ||
+	    tailidx >= shtrans->queues[qtype].data_slots)
+		return false;
 
 	return (headidx == tailidx) ? true : false;
 }
@@ -59,17 +66,21 @@ static rpmi_bool_t shmem_is_full(struct rpmi_transport *trans,
 				 enum rpmi_queue_type qtype)
 {
 	struct rpmi_transport_shmem *shtrans = trans->priv;
-	rpmi_uint32_t queue_base = shtrans->queues[qtype].queue_base;
-	rpmi_uint32_t data_slots = shtrans->queues[qtype].data_slots;
+	rpmi_uint32_t queue_base, data_slots;
 	struct rpmi_shmem *shmem = shtrans->shmem;
 	rpmi_uint32_t headidx, tailidx;
 	int rc;
+
+	if (qtype >= shtrans->queue_count)
+		return true;
+	queue_base = shtrans->queues[qtype].queue_base;
+	data_slots = shtrans->queues[qtype].data_slots;
 
 	rc = rpmi_shmem_read(shmem, queue_base, &headidx, sizeof(headidx));
 	if (rc) {
 		DPRINTF("%s: %s: failed to read head index of qtype %d\n",
 			__func__, trans->name, qtype);
-		return false;
+		return true;
 	}
 	headidx = rpmi_to_le32(headidx);
 
@@ -78,9 +89,11 @@ static rpmi_bool_t shmem_is_full(struct rpmi_transport *trans,
 	if (rc) {
 		DPRINTF("%s: %s: failed to read tail index of qtype %d\n",
 			__func__, trans->name, qtype);
-		return false;
+		return true;
 	}
 	tailidx = rpmi_to_le32(tailidx);
+	if (headidx >= data_slots || tailidx >= data_slots)
+		return true;
 
 	return (rpmi_env_mod32(tailidx + 1, data_slots) == headidx) ? true : false;
 }
@@ -105,6 +118,8 @@ static enum rpmi_error shmem_enqueue(struct rpmi_transport *trans,
 		return RPMI_ERR_FAILED;
 	}
 	tailidx = rpmi_to_le32(tailidx);
+	if (tailidx >= data_slots)
+		return RPMI_ERR_INVALID_PARAM;
 
 	rc = rpmi_shmem_write(shmem, queue_base + ((tailidx + 2) * trans->slot_size),
 			      msg, msg_size);
@@ -141,9 +156,11 @@ static enum rpmi_error shmem_dequeue(struct rpmi_transport *trans,
 	if (rc) {
 		DPRINTF("%s: %s: failed to read head index of qtype %d\n",
 			__func__, trans->name, qtype);
-		return false;
+		return RPMI_ERR_IO;
 	}
 	headidx = rpmi_to_le32(headidx);
+	if (headidx >= data_slots)
+		return RPMI_ERR_INVALID_PARAM;
 
 	rc = rpmi_shmem_read(shmem, queue_base + ((headidx + 2) * trans->slot_size),
 			     out_msg, trans->slot_size);

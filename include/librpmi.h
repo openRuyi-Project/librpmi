@@ -1384,9 +1384,9 @@ struct rpmi_clock_rate {
 struct rpmi_clock_data {
 	/* Parent clock ID */
 	rpmi_uint32_t		parent_id;
-	/* Clock transition latency(milli-seconds) */
+	/* Legacy field name: CLOCK transition latency is microseconds on the wire. */
 	rpmi_uint32_t		transition_latency_ms;
-	/* Number of rates supported as per the clock format type */
+	/* Number of discrete rates or complete linear min/max/step ranges */
 	rpmi_uint32_t		rate_count;
 	/* Clock rate format type */
 	enum rpmi_clock_type	clock_type;
@@ -1398,7 +1398,7 @@ struct rpmi_clock_data {
 
 /** Clock Attributes */
 struct rpmi_clock_attrs {
-	/** clock transition latency in milli-seconds */
+	/** clock transition latency in microseconds */
 	rpmi_uint32_t		transition_latency;
 	/** clock rate format type */
 	enum rpmi_clock_type	type;
@@ -1788,6 +1788,11 @@ enum rpmi_dpwr_state {
 	RPMI_DPWR_STATE_OFF		= 3,
 	RPMI_DPWR_STATE_MAX,
 };
+
+/* RPMI v1.0 POWER_STATE: VALUE[15:0], CONTEXT[16], reserved[31:17]. */
+#define RPMI_DPWR_STATE_VALUE_MASK 0xffffU
+#define RPMI_DPWR_STATE_CONTEXT_LOST (1U << 16)
+#define RPMI_DPWR_STATE_VENDOR_START 0x1000U
 
 /**
  * DPWR Data and Tree details
